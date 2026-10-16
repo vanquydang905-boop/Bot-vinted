@@ -348,18 +348,17 @@ def process_sku_paste(page, gspread_sheet, sku, row_mapping, target_view="all"):
         if matches:
             matches.sort(reverse=True)
             item_dir = matches[0]
-    out_dir = os.path.join(item_dir, "flatlay")
-    os.makedirs(out_dir, exist_ok=True)
+    # Fichiers placés directement à la racine de {sku}, sans sous-dossiers ni doublons
+    out_dir = item_dir
+    face_file = os.path.join(item_dir, "flatlay_face.png")
+    back_file = os.path.join(item_dir, "flatlay_back.png")
     
-    face_file = os.path.join(out_dir, "flatlay_face.png")
-    back_file = os.path.join(out_dir, "flatlay_back.png")
-    
-    screen_dir = os.path.join(item_dir, "image-screen")
-    if not os.path.exists(screen_dir):
-        log(f"[!] Pas de dossier image-screen pour SKU {sku}")
-        return
-        
-    photos = sorted([os.path.join(screen_dir, f) for f in os.listdir(screen_dir) if f.startswith("photo_") and f.endswith(".jpg")])
+    # Recherche des photos sources : directement dans item_dir, ou secours dans image-screen/
+    photos = sorted([os.path.join(item_dir, f) for f in os.listdir(item_dir) if f.startswith("photo_") and f.endswith(".jpg")])
+    if not photos:
+        screen_dir = os.path.join(item_dir, "image-screen")
+        if os.path.exists(screen_dir):
+            photos = sorted([os.path.join(screen_dir, f) for f in os.listdir(screen_dir) if f.startswith("photo_") and f.endswith(".jpg")])
     if not photos:
         log(f"[!] Pas de photo source pour SKU {sku}")
         return
@@ -383,19 +382,6 @@ def process_sku_paste(page, gspread_sheet, sku, row_mapping, target_view="all"):
     import account_library
     prompt_face, prompt_back = account_library.get_prompts(account_name)
     log(f"  [🎨 Prompts Compte] Chargement des prompts personnalisés pour '{account_name}'")
-
-    # 2. Copier les photos originales et les prompts dans le dossier de sortie
-    try:
-        for p in photos:
-            shutil.copyfile(p, os.path.join(out_dir, os.path.basename(p)))
-        shutil.copyfile(photos[0], os.path.join(out_dir, "original.jpg"))
-        with open(os.path.join(out_dir, "prompt_face.txt"), "w", encoding="utf-8") as f:
-            f.write(prompt_face)
-        with open(os.path.join(out_dir, "prompt_back.txt"), "w", encoding="utf-8") as f:
-            f.write(prompt_back)
-        log(f"  [📸 Source & Prompts] {len(photos)} photos d'origine + original.jpg + prompts enregistrés.")
-    except Exception as e:
-        log(f"  [!] Erreur copie fichiers locaux : {e}")
 
     # 3. Génération Vue FACE (avec collage des photos + prompt FACE spécifique au compte)
     if target_view in ["face", "all"]:

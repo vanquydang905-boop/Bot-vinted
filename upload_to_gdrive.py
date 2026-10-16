@@ -31,42 +31,109 @@ def run_rclone(local_path, remote_path, folder_id):
     except subprocess.CalledProcessError as e:
         log(f"  [❌ rclone] Erreur lors de la copie de {local_path} vers {remote_path} : {e}")
 
+def flatten_local_sku_dir(sku_dir):
+    """
+    Déplace tous les fichiers des sous-dossiers (image-screen, flatlay, desc-screen)
+    directement à la racine de {sku_dir}, élimine les doublons (original.jpg, prompts, etc.)
+    et supprime les sous-dossiers inutiles.
+    """
+    import shutil
+    if not os.path.exists(sku_dir):
+        return
+
+    # 1. Traiter image-screen/
+    img_screen_dir = os.path.join(sku_dir, "image-screen")
+    if os.path.exists(img_screen_dir):
+        for f in os.listdir(img_screen_dir):
+            src = os.path.join(img_screen_dir, f)
+            dst = os.path.join(sku_dir, f)
+            if not os.path.exists(dst):
+                try: shutil.move(src, dst)
+                except Exception: pass
+            else:
+                try: os.remove(src)
+                except Exception: pass
+        try: os.rmdir(img_screen_dir)
+        except Exception: pass
+
+    # 2. Traiter desc-screen/
+    desc_screen_dir = os.path.join(sku_dir, "desc-screen")
+    if os.path.exists(desc_screen_dir):
+        for f in os.listdir(desc_screen_dir):
+            src = os.path.join(desc_screen_dir, f)
+            dst = os.path.join(sku_dir, f)
+            if not os.path.exists(dst):
+                try: shutil.move(src, dst)
+                except Exception: pass
+            else:
+                try: os.remove(src)
+                except Exception: pass
+        try: os.rmdir(desc_screen_dir)
+        except Exception: pass
+
+    # 3. Traiter flatlay/
+    flatlay_dir = os.path.join(sku_dir, "flatlay")
+    if os.path.exists(flatlay_dir):
+        for f in os.listdir(flatlay_dir):
+            src = os.path.join(flatlay_dir, f)
+            dst = os.path.join(sku_dir, f)
+            if f in ["original.jpg", "prompt_face.txt", "prompt_back.txt"] or f.startswith("debug_echec_"):
+                try: os.remove(src)
+                except Exception: pass
+                continue
+            if not os.path.exists(dst):
+                try: shutil.move(src, dst)
+                except Exception: pass
+            else:
+                try: os.remove(src)
+                except Exception: pass
+        try: shutil.rmtree(flatlay_dir, ignore_errors=True)
+        except Exception: pass
+
 def sync_single_sku(sku_dir, account, date_str, sku, folder_id):
     """
-    Synchronise un SKU complet (dossier origine et flatlay) sur Google Drive.
+    Synchronise un SKU complet DIRECTEMENT dans {account}/{date_str}/{sku}/ sur Google Drive,
+    sans sous-dossiers ('origine/' ou 'flatlay/') et sans doublons.
     """
     remote_base = f"{account}/{date_str}/{sku}"
-    synced_items = []
+    
+    # 1. Aplatir le dossier localement pour garantir la structure directe sans sous-dossiers
+    flatten_local_sku_dir(sku_dir)
 
-    # 1. Dossier 'origine'
-    # Photos brutes image-screen/
-    img_screen_dir = os.path.join(sku_dir, "image-screen")
-    if os.path.exists(img_screen_dir) and os.listdir(img_screen_dir):
-        run_rclone(img_screen_dir, f"{remote_base}/origine/", folder_id)
-        synced_items.append("image-screen")
-
-    # Guides des tailles desc-screen/
-    desc_screen_dir = os.path.join(sku_dir, "desc-screen")
-    if os.path.exists(desc_screen_dir) and os.listdir(desc_screen_dir):
-        run_rclone(desc_screen_dir, f"{remote_base}/origine/", folder_id)
-        synced_items.append("desc-screen")
-
-    # Fichier info.txt
-    info_path = os.path.join(sku_dir, "info.txt")
-    if os.path.exists(info_path):
-        run_rclone(info_path, f"{remote_base}/origine/", folder_id)
-        synced_items.append("info.txt")
-
-    # 2. Dossier 'flatlay'
-    flatlay_dir = os.path.join(sku_dir, "flatlay")
-    if os.path.exists(flatlay_dir) and os.listdir(flatlay_dir):
-        run_rclone(flatlay_dir, f"{remote_base}/flatlay/", folder_id)
-        synced_items.append("flatlay")
-
-    if synced_items:
-        log(f"  [✅ Drive] SKU {sku} ({account} - {date_str}) synchronisé -> {', '.join(synced_items)}")
-    else:
-        log(f"  [⚠️ Drive] Aucun fichier valide trouvé à synchroniser pour SKU {sku} dans {sku_dir}")
+    # 2. Synchronisation directe à la racine de {sku} via rclone
+    cmd = [
+        "rclone", "copy",
+        sku_dir,
+        f"gdrive:{remote_base}/",
+        "--drive-root-folder-id", folder_id,
+        "--fast-list",
+        "--transfers", "4",
+        "--checkers", "8",
+        "--exclude", "prompt_*.txt",
+        "--exclude", "debug_*.png",
+        "--exclude", "*.lock",
+        "--exclude", "original.jpg",
+        "--exclude", "image-screen/**",
+        "--exclude", "flatlay/**",
+        "--exclude", "desc-screen/**",
+        "--stats-log-level", "NOTICE"
+    ]
+    try:
+        subprocess.run(cmd, check=True)
+        log(f"  [✅ Drive] SKU {sku} ({account} - {date_str}) synchronisé directement à la racine de {sku}/")
+        # 3. Supprimer les anciens sous-dossiers distants s'ils existaient (origine/ et flatlay/)
+        for sub in ["origine", "flatlay"]:
+            try:
+                subprocess.run([
+                    "rclone", "purge",
+                    f"gdrive:{remote_base}/{sub}",
+                    "--drive-root-folder-id", folder_id,
+                    "--timeout", "15s"
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+    except subprocess.CalledProcessError as e:
+        log(f"  [❌ rclone] Erreur synchronisation SKU {sku} : {e}")
 
 def find_sku_directory(account, sku):
     """

@@ -192,10 +192,9 @@ with sync_playwright() as p:
                 sku = match_id.group(1) if match_id else "article"
 
     item_dir = output_base_dir if output_base_dir else os.path.join("image", sku)
-    dossier_images = os.path.join(item_dir, "image-screen")
-    dossier_desc = os.path.join(item_dir, "desc-screen")
-    os.makedirs(dossier_images, exist_ok=True)
-    os.makedirs(dossier_desc, exist_ok=True)
+    dossier_images = item_dir
+    dossier_desc = item_dir
+    os.makedirs(item_dir, exist_ok=True)
 
     # --- EXTRACTION DES INFORMATIONS (PRIX, TYPE, CATEGORIE, TITRE) ---
     info_data = page.evaluate('''() => {

@@ -404,32 +404,39 @@ def generer_annonce(page, sku, prompt_template_path, info_dir, taille_full, acco
 
     prompt_text = prompt_template.replace("{TAILLE}", taille_full).replace("{INFO_TXT}", info_txt_clean)
 
-    desc_screen = os.path.join(info_dir, "desc-screen")
-    if not os.path.exists(desc_screen):
-        desc_screen = f"/root/shein/image/{sku}/desc-screen"
-
-    image_screen = os.path.join(info_dir, "image-screen")
-    if not os.path.exists(image_screen):
-        image_screen = f"/root/shein/image/{sku}/image-screen"
-
     photo_paths = []
-    if os.path.exists(desc_screen) and os.listdir(desc_screen):
-        all_files = sorted([os.path.join(desc_screen, f) for f in os.listdir(desc_screen) if f.endswith((".jpg", ".png"))])
-        size_photos = [p for p in all_files if "size_chart" in os.path.basename(p).lower()]
-        title_photos = [p for p in all_files if "title_full" in os.path.basename(p).lower()]
-        other_photos = [p for p in all_files if p not in size_photos and p not in title_photos]
-        photo_paths = size_photos + other_photos + title_photos
-        if not photo_paths:
-            photo_paths = all_files
-            
-    # Ajouter aussi la photo produit principale si disponible
-    if os.path.exists(image_screen) and os.listdir(image_screen):
-        img_files = sorted([os.path.join(image_screen, f) for f in os.listdir(image_screen) if f.endswith((".jpg", ".png"))])
-        if img_files and img_files[0] not in photo_paths:
-            photo_paths.insert(0, img_files[0])
+    # 1. Vérification directe dans info_dir ({sku})
+    if os.path.exists(info_dir):
+        all_direct = sorted([os.path.join(info_dir, f) for f in os.listdir(info_dir) if f.endswith((".jpg", ".png"))])
+        size_photos = [p for p in all_direct if "size_chart" in os.path.basename(p).lower()]
+        title_photos = [p for p in all_direct if "title_full" in os.path.basename(p).lower()]
+        prod_photos = [p for p in all_direct if os.path.basename(p).startswith("photo_")]
+        if prod_photos:
+            photo_paths = size_photos + title_photos + [prod_photos[0]]
 
+    # 2. Secours dans les anciens sous-dossiers si non trouvé
     if not photo_paths:
-        photo_paths = sorted([os.path.join(info_dir, f) for f in os.listdir(info_dir) if f.startswith("photo_") or f.startswith("size_")])
+        desc_screen = os.path.join(info_dir, "desc-screen")
+        if not os.path.exists(desc_screen):
+            desc_screen = f"/root/shein/image/{sku}/desc-screen"
+
+        image_screen = os.path.join(info_dir, "image-screen")
+        if not os.path.exists(image_screen):
+            image_screen = f"/root/shein/image/{sku}/image-screen"
+
+        if os.path.exists(desc_screen) and os.listdir(desc_screen):
+            all_files = sorted([os.path.join(desc_screen, f) for f in os.listdir(desc_screen) if f.endswith((".jpg", ".png"))])
+            size_photos = [p for p in all_files if "size_chart" in os.path.basename(p).lower()]
+            title_photos = [p for p in all_files if "title_full" in os.path.basename(p).lower()]
+            other_photos = [p for p in all_files if p not in size_photos and p not in title_photos]
+            photo_paths = size_photos + other_photos + title_photos
+            if not photo_paths:
+                photo_paths = all_files
+                
+        if os.path.exists(image_screen) and os.listdir(image_screen):
+            img_files = sorted([os.path.join(image_screen, f) for f in os.listdir(image_screen) if f.endswith((".jpg", ".png"))])
+            if img_files and img_files[0] not in photo_paths:
+                photo_paths.insert(0, img_files[0])
 
     print(f"  [🤖 Rédaction IA via Meta AI] Envoi du prompt ({taille_full}) avec {len(photo_paths)} photo(s) pour '{account_name}'...")
     raw_response = run_web_ai_redaction(page, prompt_text, photo_paths, account_name=account_name)

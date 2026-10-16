@@ -97,9 +97,12 @@ def ensure_description_text(sku, account_name, ws, row_idx, item_dir, log):
     Garantit que description.txt existe et est valide.
     Génère la description si absente, sans bloquer.
     """
-    out_dir = os.path.join(item_dir, "flatlay")
-    os.makedirs(out_dir, exist_ok=True)
-    desc_file = os.path.join(out_dir, "description.txt")
+    out_dir = item_dir
+    desc_file = os.path.join(item_dir, "description.txt")
+    if not os.path.exists(desc_file):
+        legacy_desc = os.path.join(item_dir, "flatlay", "description.txt")
+        if os.path.exists(legacy_desc):
+            desc_file = legacy_desc
 
     if os.path.exists(desc_file) and os.path.getsize(desc_file) > 20:
         try:
@@ -149,12 +152,21 @@ def process_single_sku(gemini_page, ws, sku, row_idx, account_name, log):
     4. Synchronise Google Drive
     5. Notifie Telegram (SEULEMENT sur succès complet, zéro spam sur échec)
     """
-    item_dir = get_sku_item_dir(sku, account_name)
-    out_dir = os.path.join(item_dir, "flatlay")
-    os.makedirs(out_dir, exist_ok=True)
-    face_file = os.path.join(out_dir, "flatlay_face.png")
-    back_file = os.path.join(out_dir, "flatlay_back.png")
-    desc_file = os.path.join(out_dir, "description.txt")
+    # Fichiers directement à la racine de {sku}
+    face_file = os.path.join(item_dir, "flatlay_face.png")
+    back_file = os.path.join(item_dir, "flatlay_back.png")
+    desc_file = os.path.join(item_dir, "description.txt")
+
+    # Fallback compatibilité anciens sous-dossiers
+    if not os.path.exists(face_file):
+        legacy_face = os.path.join(item_dir, "flatlay", "flatlay_face.png")
+        if os.path.exists(legacy_face): face_file = legacy_face
+    if not os.path.exists(back_file):
+        legacy_back = os.path.join(item_dir, "flatlay", "flatlay_back.png")
+        if os.path.exists(legacy_back): back_file = legacy_back
+    if not os.path.exists(desc_file):
+        legacy_desc = os.path.join(item_dir, "flatlay", "description.txt")
+        if os.path.exists(legacy_desc): desc_file = legacy_desc
 
     face_exists = os.path.exists(face_file) and os.path.getsize(face_file) > 1000
     back_exists = os.path.exists(back_file) and os.path.getsize(back_file) > 1000
@@ -164,11 +176,12 @@ def process_single_sku(gemini_page, ws, sku, row_idx, account_name, log):
         update_cell_status(ws, row_idx, 3, "Image générée", log)
         return True
 
-    # Vérification dossier source scraping
-    screen_dir = os.path.join(item_dir, "image-screen")
-    photos = []
-    if os.path.exists(screen_dir):
-        photos = [f for f in os.listdir(screen_dir) if f.startswith("photo_") and f.endswith(".jpg")]
+    # Vérification photos sources directement dans item_dir (ou secours dans image-screen)
+    photos = [f for f in os.listdir(item_dir) if f.startswith("photo_") and f.endswith(".jpg")]
+    if not photos:
+        screen_dir = os.path.join(item_dir, "image-screen")
+        if os.path.exists(screen_dir):
+            photos = [f for f in os.listdir(screen_dir) if f.startswith("photo_") and f.endswith(".jpg")]
 
     if not photos or not os.path.exists(os.path.join(item_dir, "info.txt")):
         log(f"  [⏳ Scraping requis] Photos sources manquantes pour {sku}.")
@@ -347,8 +360,12 @@ def run_dedicated_browser_runner(port, tabs, log_file):
 
                             val_c = r[2].strip() if len(r) > 2 else ""
                             item_dir = get_sku_item_dir(sku, account_name)
-                            face_f = os.path.join(item_dir, "flatlay", "flatlay_face.png")
-                            back_f = os.path.join(item_dir, "flatlay", "flatlay_back.png")
+                            face_f = os.path.join(item_dir, "flatlay_face.png")
+                            if not os.path.exists(face_f):
+                                face_f = os.path.join(item_dir, "flatlay", "flatlay_face.png")
+                            back_f = os.path.join(item_dir, "flatlay_back.png")
+                            if not os.path.exists(back_f):
+                                back_f = os.path.join(item_dir, "flatlay", "flatlay_back.png")
                             has_images = (os.path.exists(face_f) and os.path.getsize(face_f) > 1000 and
                                           os.path.exists(back_f) and os.path.getsize(back_f) > 1000)
 
