@@ -1,0 +1,36 @@
+# Environnement et Clés Secrètes
+.env
+service_account.json
+token.json
+*.pem
+*.key
+
+# Caches et Dépendances
+__pycache__/
+*.py[cod]
+*$py.class
+node_modules/
+.pytest_cache/
+
+# Fichiers Temporaires et Locks
+*.lock
+browser_locks/
+scratch/
+drive_upload_staging/
+
+# Données Dynamiques Locales et Données d'état
+multi_ports_status.json
+gdoc_tabs_data.json
+telegram_subscribers.json
+gdoc_content.txt
+
+# Dossiers d'Images et Médias Lourds (Gérés sur Google Drive)
+screen_*/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.html
+
+# Fichiers de Logs
+*.log
